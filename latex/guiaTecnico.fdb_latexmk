@@ -1,0 +1,23 @@
+# Fdb version 4
+["pdflatex"] 1744395878.66876 "c:/SourceCode/0II2/EININDII11_PLCModbus/latex/guiaTecnico.tex" "guiaTecnico.pdf" "guiaTecnico" 1744395882.22358 2
+  "C:/Program Files/MiKTeX/fonts/tfm/jknappen/ec/ecrm1200.tfm" 993062126 3152 4850ff0163852b7fab34bd55e1197f28 ""
+  "C:/Program Files/MiKTeX/fonts/tfm/public/cm/cmr12.tfm" 1136765053 1288 655e228510b4c2a1abe905c368440826 ""
+  "C:/Program Files/MiKTeX/tex/generic/babel/babel.sty" 1704647332 150008 7a05b0fdc0167c04e192003e780ab195 ""
+  "C:/Program Files/MiKTeX/tex/generic/babel/txtbabel.def" 1704647332 6948 df63e25be1d2bc35bbad5a0141f41348 ""
+  "C:/Program Files/MiKTeX/tex/latex/arabi/bblopts.cfg" 1705750854 902 c30e5c373bc58bde21f8f63a3091626f ""
+  "C:/Program Files/MiKTeX/tex/latex/base/article.cls" 1705273579 20144 147463a6a579f4597269ef9565205cfe ""
+  "C:/Program Files/MiKTeX/tex/latex/base/fontenc.sty" 1705273578 5119 a04a8b68ab4f6ce800a41f7f8012a10e ""
+  "C:/Program Files/MiKTeX/tex/latex/base/inputenc.sty" 1705273578 5048 425739d70251273bf93e3d51f3c40048 ""
+  "C:/Program Files/MiKTeX/tex/latex/base/size12.clo" 1705273578 8449 f07039d8e4e89f21078d9b5137579bfc ""
+  "C:/Program Files/MiKTeX/tex/latex/lm/lmodern.sty" 1430474546 1608 b00724785a9e9c599e5181bb8729160b ""
+  "C:/Users/josuemorais/AppData/Local/MiKTeX/miktex/data/le/pdftex/pdflatex.fmt" 1743417428 24215249 f1688ada4f6ec48c355affcebcef205c ""
+  "C:/Users/josuemorais/AppData/Roaming/MiKTeX/tex/latex/babel-portuges/brazil.ldf" 1626079182 6591 308dec8ccec5a8d302be8a046d473dd3 ""
+  "c:/SourceCode/0II2/EININDII11_PLCModbus/latex/guiaTecnico.tex" 1744395168 12287 661774673b50a875cdc9143434cfe3e1 ""
+  "geometry.sty" 0 -1 0 ""
+  "guiaTecnico.aux" 1744395878 32 3985256e7290058c681f74d7a3565a19 "pdflatex"
+  "guiaTecnico.tex" 1744395168 12287 661774673b50a875cdc9143434cfe3e1 ""
+  (generated)
+  "guiaTecnico.aux"
+  "guiaTecnico.log"
+  "guiaTecnico.pdf"
+  (rewritten before read)

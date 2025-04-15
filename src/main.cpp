@@ -1,3 +1,8 @@
+// coil status:       [0] def_pin_D1,   [1] def_pin_D2,    [2] def_pin_D3,             [3] def_pin_D4,             [4] def_pin_RELE
+// Input status:      [0] def_pin_RTN1, [1]  def_pin_RTN2, [2] def_pin_PUSH1,          [3]  def_pin_PUSH2
+// Input Registers:   [0] POT1,         [1] POT2,          [2] Leitura 4-20mA canal 1, [3] Leitura 4-20mA canal 2, [4] ADC1
+// Holding Registers: [0] DAC,          [1] Write 4-20mA,  [2] PWM
+
 #include <Arduino.h>
 #include <WiFi.h>
 #include <ModbusServerWiFi.h>
@@ -27,27 +32,6 @@
 #define def_pin_D4         4    
 #define def_pin_RTN1       2    
 
-// -------------------------------------------------
-// Se as constantes dos códigos de função não estiverem definidas,
-// defina-as manualmente:
-#ifndef WRITE_SINGLE_REGISTER
-  #define WRITE_SINGLE_REGISTER 0x06
-#endif
-
-#ifndef READ_COILS
-  #define READ_COILS 0x01
-#endif
-
-#ifndef WRITE_SINGLE_COIL
-  #define WRITE_SINGLE_COIL 0x05
-#endif
-
-#ifndef READ_DISCRETE_INPUT
-  #define READ_DISCRETE_INPUT 0x02
-#endif
-
-// -------------------------------------------------
-
 // Variáveis e objetos do projeto:
 char DDNSName[15] = "inindkit";
 ADS1115_c ads; 
@@ -59,13 +43,8 @@ WSerial_c WSerial;
 ModbusServerWiFi modbusServer;
 
 #define HRSIZE 3
-
-
-// *** Apenas para saídas (Holding Registers e Coils) permanecem vetorizadas ***
-// Holding Registers: [0]: DAC, [1]: 4-20mA, [2]: PWM
-volatile uint16_t holdingRegisters[HRSIZE] = { 0, 0, 0 };
-// Coils: [0]: D1, [1]: D2, [2]: D3, [3]: D4, [4]: RELÊ
-volatile bool coils[5] = { false, false, false, false, false };
+volatile uint16_t holdingRegisters[HRSIZE] = { 0, 0, 0 }; //[0]: DAC, [1]: Wriete 4-20mA, [2]: PWM
+volatile bool coils[5] = { false, false, false, false, false }; //[0]: D1, [1]: D2, [2]: D3, [3]: D4, [4]: RELÊ
 
 
 // ========================================================
@@ -327,13 +306,13 @@ void setup() {
     }
     WSerial.println("Servidor Modbus TCP (eModbus) iniciado com sucesso!");
 
-    // Registra os callbacks para os respectivos códigos de função
-    modbusServer.registerWorker(1, READ_HOLD_REGISTER, &readHoldingRegisters);
-    modbusServer.registerWorker(1, WRITE_SINGLE_REGISTER, &writeSingleHoldingRegister);
-    modbusServer.registerWorker(1, READ_INPUT_REGISTER,  &readInputRegisters);
-    modbusServer.registerWorker(1, READ_COILS,         &readCoils);
-    modbusServer.registerWorker(1, WRITE_SINGLE_COIL,  &writeSingleCoil);
-    modbusServer.registerWorker(1, READ_DISCRETE_INPUT, &readDiscreteInputs);
+    // Registra os callbacks para os respectivos códigos de função    
+    modbusServer.registerWorker(1, READ_COIL,           &readCoils);
+    modbusServer.registerWorker(1, READ_DISCR_INPUT,    &readDiscreteInputs);
+    modbusServer.registerWorker(1, READ_HOLD_REGISTER,  &readHoldingRegisters);
+    modbusServer.registerWorker(1, READ_INPUT_REGISTER, &readInputRegisters);
+    modbusServer.registerWorker(1, WRITE_COIL,          &writeSingleCoil);
+    modbusServer.registerWorker(1, WRITE_HOLD_REGISTER, &writeSingleHoldingRegister);
 }
 
 // ========================================================

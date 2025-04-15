@@ -1,0 +1,235 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[brazil]{babel}
+\usepackage{lmodern}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{parskip} % espaço entre parágrafos
+\geometry{a4paper, left=2.5cm, right=2.5cm, top=2.5cm, bottom=2.5cm}
+
+\title{Guia Técnico: Configurando o Codesys Control Win x64\\ em Ambiente Multiusuário no Windows Server 2022}
+\author{}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section{Visão Geral da Solução}
+Em um cenário com \textbf{Windows Server 2022 (Terminal Services)} e múltiplos usuários simultâneos via RDP, é possível configurar o \textbf{Codesys Control Win x64} (SoftPLC) de forma que cada usuário execute seu próprio runtime isolado. Isso requer criar instâncias separadas do Codesys Control Win x64 para cada usuário, garantindo que não haja conflitos de portas, variáveis ou arquivos de configuração entre elas.
+
+Cada instância funcionará com uma licença trial de 2 horas, de forma independente para cada usuário. Isto é, cada usuário deverá reiniciar seu runtime manualmente a cada 2 horas, conforme a política de trial. A seguir, apresenta-se o passo a passo de instalação, configuração de isolamento, gerenciamento de perfis e permissões, execução do runtime e práticas recomendadas de segurança e desempenho.
+
+\section{Preparação do Ambiente e Instalação}
+
+\subsection{Configuração do Windows Server 2022}
+\begin{itemize}[label=\textbullet]
+  \item Configure o servidor para Serviços de Terminal (RDS), permitindo múltiplas sessões RDP simultâneas.
+  \item Crie contas separadas para os 7 usuários (6 via RDP e 1 local).
+\end{itemize}
+
+\subsection{Instalação do Codesys Development System}
+\begin{itemize}[label=\textbullet]
+  \item Faça o download e instale o CODESYS Development System (versão compatível com o Windows Server 2022) com privilégios de administrador.
+  \item Certifique-se de que o atalho ``CODESYS Control Win V3 x64'' foi instalado corretamente.
+  \item Realize um teste inicial executando o runtime e, em seguida, interrompa-o para proceder com a configuração manual das instâncias.
+\end{itemize}
+
+\section{Criando Instâncias Isoladas do Codesys Control Win x64}
+O objetivo é duplicar a instalação padrão para que cada usuário tenha uma instância separada.
+
+\subsection{Copiar os Arquivos do Runtime}
+\begin{itemize}[label=\textbullet]
+  \item Localize o diretório de instalação (por exemplo, \texttt{C:\textbackslash{}Program Files\textbackslash{}CODESYS\textbackslash{}CODESYS Control Win V3\textbackslash{}GatewayPLC\texttt{}}).
+  \item Copie essa pasta para novos locais, criando uma estrutura como:
+    \begin{verbatim}
+C:\CODESYS\Runtimes\
+    Instance_User1\
+    Instance_User2\
+    ...
+    Instance_User7\
+    \end{verbatim}
+  \item Renomeie as pastas para identificar o usuário (ex.: \texttt{Instance\_User1} para o User1).
+\end{itemize}
+
+\subsection{Definir Diretório de Trabalho Único}
+\begin{itemize}[label=\textbullet]
+  \item Cada instância deve apontar para um diretório de trabalho distinto.
+  \item No arquivo de configuração \texttt{CODESYSControl.cfg} de cada instância, localize a entrada:
+    \begin{verbatim}
+[SysFile]
+Windows.WorkingDirectory=...
+    \end{verbatim}
+  \item Altere essa entrada para apontar para um diretório exclusivo. Por exemplo:
+    \begin{itemize}
+      \item Para User1: \texttt{Windows.WorkingDirectory=C:\textbackslash{}ProgramData\textbackslash{}CODESYS\textbackslash{}CODESYSControlWinV3x64\textbackslash{}User1}
+      \item Para User2: \texttt{Windows.WorkingDirectory=C:\textbackslash{}ProgramData\textbackslash{}CODESYS\textbackslash{}CODESYSControlWinV3x64\textbackslash{}User2}
+      \item E assim por diante.
+    \end{itemize}
+  \item Crie manualmente essas pastas em \texttt{C:\textbackslash{}ProgramData\textbackslash{}CODESYS\textbackslash{}CODESYSControlWinV3x64\textbackslash{}} e copie o conteúdo do diretório de trabalho padrão para cada uma.
+\end{itemize}
+
+\subsection{Isolamento de Portas de Comunicação}
+\begin{itemize}[label=\textbullet]
+  \item Cada instância precisa de portas exclusivas para evitar conflitos:
+    \begin{itemize}
+      \item \textbf{Gateway (CmpGwCommDrvTcp):}
+        \begin{itemize}
+          \item User1: \texttt{ListenPort=1217}
+          \item User2: \texttt{ListenPort=1218}
+          \item $\ldots$
+          \item User7: \texttt{ListenPort=1223}
+        \end{itemize}
+      \item \textbf{Porta do Runtime (ex.: 11740):} Se possível, configure cada instância para usar portas sequenciais.
+      \item \textbf{WebVisu (CmpWebServer):}
+        \begin{itemize}
+          \item User1: \texttt{WebServerPortNr=8080}
+          \item User2: \texttt{WebServerPortNr=8081}
+          \item $\ldots$
+        \end{itemize}
+    \end{itemize}
+  \item Atribua um \textbf{NodeName} exclusivo para cada instância na seção \texttt{[SysTarget]}:
+    \begin{itemize}
+      \item Exemplo: \texttt{NodeName=PLC\_User1} para User1, \texttt{NodeName=PLC\_User2} para User2, etc.
+    \end{itemize}
+\end{itemize}
+
+\subsection{Consideração Adicional}
+Alternativamente, é possível configurar o diretório de trabalho de cada instância dentro do perfil do usuário. Entretanto, manter os dados em \texttt{ProgramData} permite uma administração centralizada.
+
+\section{Gerenciamento de Usuários e Permissões}
+\begin{itemize}[label=\textbullet]
+  \item \textbf{Permissões dos Diretórios:}
+    \begin{itemize}
+      \item Configure as pastas de \texttt{Instance\_UserX} em \texttt{C:\textbackslash{}CODESYS\textbackslash{}Runtimes\textbackslash{}} para que apenas o usuário correspondente e os administradores tenham acesso.
+      \item Ajuste as pastas em \texttt{C:\textbackslash{}ProgramData\textbackslash{}CODESYS\textbackslash{}CODESYSControlWinV3x64\textbackslash{}UserX} para serem acessíveis somente pelo usuário respectivo.
+    \end{itemize}
+  \item \textbf{Contas de Usuário:}
+    \begin{itemize}
+      \item Crie contas de usuário padrão (não administradores) e adicione-os ao grupo \texttt{Remote Desktop Users}.
+    \end{itemize}
+  \item \textbf{Isolamento entre Sessões:}
+    \begin{itemize}
+      \item Cada sessão RDP é isolada, garantindo que um usuário não interfira na sessão de outro.
+    \end{itemize}
+  \item \textbf{Perfis e Variáveis de Ambiente:}
+    \begin{itemize}
+      \item Cada usuário possui seu próprio perfil, evitando conflitos no uso do CODESYS IDE.
+    \end{itemize}
+  \item Caso um serviço global do CODESYS Gateway esteja ativo, desative-o para evitar conflitos com as instâncias independentes.
+\end{itemize}
+
+\section{Iniciando o Runtime e Gerenciando a Licença de 2 Horas}
+\begin{itemize}[label=\textbullet]
+  \item \textbf{Iniciando a Instância:}
+    \begin{itemize}
+      \item Cada usuário deve executar manualmente o arquivo \texttt{CODESYSControlService.exe} na pasta correspondente (\texttt{Instance\_UserX}).
+      \item Crie atalhos no menu Iniciar ou na área de trabalho, certificando-se de que o parâmetro ``Iniciar em'' aponte para o diretório correto.
+    \end{itemize}
+  \item \textbf{Conectando o IDE ao Runtime:}
+    \begin{itemize}
+      \item No CODESYS IDE, configure a comunicação por meio de ``Scan Network'' ou adicione manualmente o gateway apontando para \texttt{localhost} com a porta configurada (por exemplo, 1217 para User1).
+      \item Verifique o \texttt{NodeName} exibido no IDE para confirmar a conexão com o PLC correto.
+    \end{itemize}
+  \item \textbf{Gerenciamento da Licença de 2 Horas:}
+    \begin{itemize}
+      \item O runtime funcionará por 2 horas, após as quais ele entrará em expiração.
+      \item Cada usuário deve reiniciar sua instância manualmente para renovar o período de 2 horas.
+      \item Recomenda-se salvar o projeto no IDE antes de reiniciar o runtime.
+      \item Não há automação de reset – o reinício deverá ser feito manualmente pelo usuário quando necessário.
+    \end{itemize}
+\end{itemize}
+
+\section{Práticas de Segurança e Desempenho}
+\subsection*{Isolamento de Rede e Firewall}
+\begin{itemize}[label=\textbullet]
+  \item Configure o Windows Firewall para restringir o acesso às portas dos SoftPLCs somente às sessões locais.
+  \item Se necessário, desative ou remova regras que permitam acesso externo às portas dos runtimes.
+\end{itemize}
+
+\subsection*{Uso de Hardware Compartilhado}
+\begin{itemize}[label=\textbullet]
+  \item Evite que dois runtimes acessem o mesmo dispositivo físico simultaneamente.
+  \item Se necessário, distribua dispositivos físicos ou utilize adaptadores diferentes.
+\end{itemize}
+
+\subsection*{Recursos do Sistema}
+\begin{itemize}[label=\textbullet]
+  \item Monitore o uso da CPU, memória, disco e tráfego de rede.
+  \item Considere ajustar a afinidade de CPU dos processos, se necessário.
+\end{itemize}
+
+\subsection*{Segurança no Codesys}
+\begin{itemize}[label=\textbullet]
+  \item Utilize o gerenciamento de usuários interno do Codesys, definindo senhas e níveis de acesso para cada SoftPLC.
+\end{itemize}
+
+\subsection*{Manutenção e Estabilidade}
+\begin{itemize}[label=\textbullet]
+  \item Mantenha o sistema operacional e o Codesys atualizados.
+  \item Documente o procedimento de duplicação e atualização das instâncias.
+\end{itemize}
+
+\subsection*{Escalabilidade}
+\begin{itemize}[label=\textbullet]
+  \item Caso a quantidade de usuários cresça, considere alternativas como virtualização ou uso de contêineres.
+\end{itemize}
+
+\section{Organização dos Arquivos e Exemplos de Configuração}
+
+\subsection*{Arquivos de Programa (Runtime)}
+\begin{itemize}[label=\textbullet]
+  \item Diretórios em \texttt{C:\textbackslash{}CODESYS\textbackslash{}Runtimes\textbackslash{}Instance\_UserX\} contendo o executável e o arquivo de configuração.
+\end{itemize}
+
+\subsection*{Diretórios de Trabalho (Dados e Configurações)}
+\begin{itemize}[label=\textbullet]
+  \item Estrutura em \texttt{C:\textbackslash{}ProgramData\textbackslash{}CODESYS\textbackslash{}CODESYSControlWinV3x64\textbackslash{}UserX} com subpastas para:
+    \begin{itemize}
+      \item Logs
+      \item Variáveis persistentes
+      \item Lógica do PLC (PlcLogic)
+      \item Visualizações
+    \end{itemize}
+\end{itemize}
+
+\subsection*{Exemplo de Configuração (Arquivo \texttt{CODESYSControl.cfg} para User2)}
+\begin{verbatim}
+[SysFile]
+Windows.WorkingDirectory=C:\ProgramData\CODESYS\CODESYSControlWinV3x64\User2
+
+[CmpGwCommDrvTcp]
+ListenPort=1218
+
+[CmpWebServer]
+WebServerPortNr=8081
+
+[SysTarget]
+NodeName=PLC_User2
+
+(Outras seções permanecem conforme o padrão da instalação)
+\end{verbatim}
+
+\subsection*{Scripts de Inicialização (Opcional)}
+\begin{itemize}[label=\textbullet]
+  \item Crie atalhos nos perfis dos usuários para facilitar a execução dos runtimes.
+\end{itemize}
+
+\subsection*{Licenciamento Futuro}
+\begin{itemize}[label=\textbullet]
+  \item Atualmente utiliza a licença trial de 2 horas.
+  \item Para uso permanente, será necessária a aquisição de licenças apropriadas para múltiplas instâncias.
+\end{itemize}
+
+\section{Conclusão}
+Seguindo os passos descritos, você terá um ambiente configurado no Windows Server 2022 com Terminal Services onde 7 usuários poderão operar instâncias isoladas do Codesys Control Win x64. Cada instância terá seu próprio conjunto de configurações, portas e diretório de trabalho, permitindo que cada usuário gerencie sua aplicação e renove a licença de 2 horas de forma manual, garantindo a independência e o isolamento entre as instâncias.
+
+\section*{Referências e Notas}
+\begin{itemize}[label=\textbullet]
+  \item Documentação oficial da CODESYS para instruções sobre diretórios de trabalho, configuração de portas e comportamento do runtime.
+  \item Recomendações práticas para ambientes multiusuário usando Terminal Services.
+  \item Orientações sobre configuração de permissões, segurança e desempenho em ambientes críticos.
+\end{itemize}
+
+\end{document}
