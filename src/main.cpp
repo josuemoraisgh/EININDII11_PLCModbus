@@ -1,7 +1,7 @@
-// coil status:       [0] def_pin_D1,   [1] def_pin_D2,    [2] def_pin_D3,             [3] def_pin_D4,             [4] def_pin_RELE
-// Input status:      [0] def_pin_RTN1, [1]  def_pin_RTN2, [2] def_pin_PUSH1,          [3]  def_pin_PUSH2
-// Input Registers:   [0] POT1,         [1] POT2,          [2] Leitura 4-20mA canal 1, [3] Leitura 4-20mA canal 2, [4] ADC1
-// Holding Registers: [0] DAC,          [1] Write 4-20mA,  [2] PWM
+// coil status:       [0] def_pin_D1,   [1] def_pin_D2,   [2] def_pin_D3,             [3] def_pin_D4,             [4] def_pin_RELE
+// Input status:      [0] def_pin_RTN1, [1] def_pin_RTN2, [2] def_pin_PUSH1,          [3]  def_pin_PUSH2
+// Input Registers:   [0] POT1,         [1] POT2,         [2] Leitura 4-20mA canal 1, [3] Leitura 4-20mA canal 2, [4] ADC1
+// Holding Registers: [0] DAC,          [1] Write 4-20mA, [2] PWM
 
 #include <Arduino.h>
 #include <WiFi.h>
