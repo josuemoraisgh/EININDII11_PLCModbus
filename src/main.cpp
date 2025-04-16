@@ -1,7 +1,7 @@
-// coil status:       [0] def_pin_D1,   [1] def_pin_D2,   [2] def_pin_D3,             [3] def_pin_D4,             [4] def_pin_RELE
-// Input status:      [0] def_pin_RTN1, [1] def_pin_RTN2, [2] def_pin_PUSH1,          [3]  def_pin_PUSH2
-// Input Registers:   [0] POT1,         [1] POT2,         [2] Leitura 4-20mA canal 1, [3] Leitura 4-20mA canal 2, [4] ADC1
-// Holding Registers: [0] DAC,          [1] Write 4-20mA, [2] PWM
+// coil status:       [0] def_pin_D1,   [1] def_pin_D2,   [2] def_pin_D3,             [3] def_pin_D4,             [4] def_pin_RELE, [5]
+// Input status:      [0] def_pin_RTN1, [1] def_pin_RTN2, [2] def_pin_PUSH1,          [3] def_pin_PUSH2,          [4]               [5] 
+// Input Registers:   [0] POT1,         [1] POT2,         [2] Leitura 4-20mA canal 1, [3] Leitura 4-20mA canal 2, [4] ADC1,         [5] ADC2,
+// Holding Registers: [0] DAC,          [1] Write 4-20mA, [2] PWM                     [3]                         [4]               [5]  
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -42,94 +42,20 @@ WSerial_c WSerial;
 // Instância do servidor Modbus (eModbus)
 ModbusServerWiFi modbusServer;
 
+
+#define COILSIZE 5
+#define STATUSSIZE 4
 #define HRSIZE 3
+#define IRSIZE 6
+
+
 volatile uint16_t holdingRegisters[HRSIZE] = { 0, 0, 0 }; //[0]: DAC, [1]: Wriete 4-20mA, [2]: PWM
-volatile bool coils[5] = { false, false, false, false, false }; //[0]: D1, [1]: D2, [2]: D3, [3]: D4, [4]: RELÊ
+volatile bool coils[COILSIZE] = { false, false, false, false, false }; //[0]: D1, [1]: D2, [2]: D3, [3]: D4, [4]: RELÊ
 
 
 // ========================================================
 // CALLBACKS MODBUS – agora realizando leituras de sensores/entradas diretamente
 // ========================================================
-
-// Leitura dos Holding Registers (FC 03)
-// (Permanece usando o vetor holdingRegisters, pois normalmente os comandos de escrita
-// alteram esses valores e o mestre pode lê‑los.)
-ModbusMessage readHoldingRegisters(ModbusMessage request) {
-  ModbusMessage response;
-  uint16_t addr = 0, words = 0;
-  request.get(2, addr);
-  request.get(4, words);
-
-  if (words > HRSIZE) {  // Apenas HRSIZE registradores disponíveis
-    response.setError(request.getServerID(), request.getFunctionCode(), ILLEGAL_DATA_ADDRESS);
-  } else {
-    response.add(request.getServerID(), request.getFunctionCode(), (uint8_t)(words * 2));
-    for (uint16_t i = 0; i < words; i++) {
-      response.add( holdingRegisters[addr + i] );
-    }
-  }
-  return response;
-}
-
-// Escrita de um Holding Register (FC 06)
-// Atualiza o vetor e imediatamente configura a saída correspondente
-ModbusMessage writeSingleHoldingRegister(ModbusMessage request) {
-  ModbusMessage response;
-  uint16_t addr = 0, value = 0;
-  request.get(2, addr);
-  request.get(4, value);
-
-  if (addr >= HRSIZE) {
-    response.setError(request.getServerID(), request.getFunctionCode(), ILLEGAL_DATA_ADDRESS);
-  } else {
-    holdingRegisters[addr] = value;
-    // Atualiza imediatamente a saída:
-    switch (addr) {
-      case 0: dacWrite(def_pin_DAC1, value); break;
-      case 1: analogWrite(def_pin_W4a20_1, value); break;
-      case 2: analogWrite(def_pin_PWM, value); break;
-    }
-    response = request;  // Ecoa a requisição em caso de sucesso
-  }
-  return response;
-}
-
-// Leitura dos Input Registers (FC 04)
-// Em vez de usar um vetor intermediário, realiza a leitura diretamente dos sensores:
-ModbusMessage readInputRegisters(ModbusMessage request) {
-  ModbusMessage response;
-  uint16_t addr = 0, words = 0;
-  request.get(2, addr);
-  request.get(4, words);
-
-  if ((addr + words) > 5) {  // Temos 5 entradas analógicas
-    response.setError(request.getServerID(), request.getFunctionCode(), ILLEGAL_DATA_ADDRESS);
-  } else {
-    response.add(request.getServerID(), request.getFunctionCode(), (uint8_t)(words * 2));
-    for (uint16_t i = 0; i < words; i++) {
-      switch (addr + i) {
-        case 0:
-          response.add(ads.analogRead(1));  // POT1
-          break;
-        case 1:
-          response.add(ads.analogRead(0));  // POT2
-          break;
-        case 2:
-          response.add(ads.analogRead(3));  // Leitura 4-20mA canal 1
-          break;
-        case 3:
-          response.add(ads.analogRead(2));  // Leitura 4-20mA canal 2
-          break;
-        case 4:
-          response.add(analogRead(def_pin_ADC1)); // ADC1
-          break;
-        default:
-          break;
-      }
-    }
-  }
-  return response;
-}
 
 // Leitura das Coils (FC 01)
 // Continua usando o vetor, pois são alteradas pelos comandos de escrita.
@@ -139,7 +65,7 @@ ModbusMessage readCoils(ModbusMessage request) {
   request.get(2, addr);
   request.get(4, count);
 
-  if ((addr + count) > 5) {
+  if ((addr + count) > COILSIZE) {
     response.setError(request.getServerID(), request.getFunctionCode(), ILLEGAL_DATA_ADDRESS);
   } else {
     uint8_t byteCount = (count + 7) / 8;
@@ -158,32 +84,6 @@ ModbusMessage readCoils(ModbusMessage request) {
   return response;
 }
 
-// Escrita de uma Coil (FC 05)
-// Atualiza o vetor e imediatamente configura a saída digital correspondente
-ModbusMessage writeSingleCoil(ModbusMessage request) {
-  ModbusMessage response;
-  uint16_t addr = 0, value = 0;
-  request.get(2, addr);
-  request.get(4, value);
-
-  if (addr >= 5) {
-    response.setError(request.getServerID(), request.getFunctionCode(), ILLEGAL_DATA_ADDRESS);
-  } else {
-    bool state = (value == 0xFF00);
-    coils[addr] = state;
-    // Atualiza imediatamente a saída digital:
-    switch (addr) {
-      case 0: digitalWrite(def_pin_D1, state ? HIGH : LOW); break;
-      case 1: digitalWrite(def_pin_D2, state ? HIGH : LOW); break;
-      case 2: digitalWrite(def_pin_D3, state ? HIGH : LOW); break;
-      case 3: digitalWrite(def_pin_D4, state ? HIGH : LOW); break;
-      case 4: digitalWrite(def_pin_RELE, state ? HIGH : LOW); break;
-    }
-    response = request;
-  }
-  return response;
-}
-
 // Leitura das Discrete Inputs (FC 02)
 // Realiza a leitura direta dos pinos, dispensando vetor intermediário:
 ModbusMessage readDiscreteInputs(ModbusMessage request) {
@@ -192,7 +92,7 @@ ModbusMessage readDiscreteInputs(ModbusMessage request) {
   request.get(2, addr);
   request.get(4, count);
 
-  if ((addr + count) > 4) {  // Apenas 4 entradas digitais disponíveis
+  if ((addr + count) > STATUSSIZE) {  // Apenas 4 entradas digitais disponíveis
     response.setError(request.getServerID(), request.getFunctionCode(), ILLEGAL_DATA_ADDRESS);
   } else {
     uint8_t byteCount = (count + 7) / 8;
@@ -218,6 +118,160 @@ ModbusMessage readDiscreteInputs(ModbusMessage request) {
   }
   return response;
 }
+
+// Leitura dos Holding Registers (FC 03)
+// (Permanece usando o vetor holdingRegisters, pois normalmente os comandos de escrita
+// alteram esses valores e o mestre pode lê‑los.)
+ModbusMessage readHoldingRegisters(ModbusMessage request) {
+  ModbusMessage response;
+  uint16_t addr = 0, words = 0;
+  request.get(2, addr);
+  request.get(4, words);
+
+  if (words > HRSIZE) {  // Apenas HRSIZE registradores disponíveis
+    response.setError(request.getServerID(), request.getFunctionCode(), ILLEGAL_DATA_ADDRESS);
+  } else {
+    response.add(request.getServerID(), request.getFunctionCode(), (uint8_t)(words * 2));
+    for (uint16_t i = 0; i < words; i++) {
+      response.add( holdingRegisters[addr + i] );
+    }
+  }
+  return response;
+}
+
+// Leitura dos Input Registers (FC 04)
+// Em vez de usar um vetor intermediário, realiza a leitura diretamente dos sensores:
+ModbusMessage readInputRegisters(ModbusMessage request) {
+  ModbusMessage response;
+  uint16_t addr = 0, words = 0;
+  request.get(2, addr);
+  request.get(4, words);
+
+  if ((addr + words) > IRSIZE) {  // Temos 5 entradas analógicas
+    response.setError(request.getServerID(), request.getFunctionCode(), ILLEGAL_DATA_ADDRESS);
+  } else {
+    response.add(request.getServerID(), request.getFunctionCode(), (uint8_t)(words * 2));
+    for (uint16_t i = 0; i < words; i++) {
+      switch (addr + i) {
+        case 0:
+          response.add(ads.analogRead(1));  // POT1
+          break;
+        case 1:
+          response.add(ads.analogRead(0));  // POT2
+          break;
+        case 2:
+          response.add(ads.analogRead(3));  // Leitura 4-20mA canal 1
+          break;
+        case 3:
+          response.add(ads.analogRead(2));  // Leitura 4-20mA canal 2
+          break;
+        case 4:
+          response.add(analogRead(def_pin_ADC1)); // ADC1
+          break;
+        case 5:
+          response.add(analogRead(def_pin_ADC2)); // ADC1
+          break;          
+        default:
+          break;
+      }
+    }
+  }
+  return response;
+}
+
+// Escrita de uma Coil (FC 05)
+// Atualiza o vetor e imediatamente configura a saída digital correspondente
+ModbusMessage writeSingleCoil(ModbusMessage request) {
+  ModbusMessage response;
+  uint16_t addr = 0, value = 0;
+  request.get(2, addr);
+  request.get(4, value);
+  
+  // Verifica se o endereço solicitado está dentro do range
+  if (addr >= COILSIZE) {
+    response.setError(request.getServerID(), request.getFunctionCode(), ILLEGAL_DATA_ADDRESS);
+    return response;
+  }
+  
+  // Valida o valor recebido; apenas 0xFF00 (true) ou 0x0000 (false) são permitidos
+  if ((value != 0xFF00) && (value != 0x0000)) {
+    response.setError(request.getServerID(), request.getFunctionCode(), ILLEGAL_DATA_VALUE);
+    return response;
+  }
+  
+  // Converte o valor para o estado booleano
+  bool state = (value == 0xFF00);
+  coils[addr] = state;
+  
+  // Atualiza imediatamente a saída digital correspondente:
+  switch (addr) {
+    case 0: digitalWrite(def_pin_D1, state ? HIGH : LOW); break;
+    case 1: digitalWrite(def_pin_D2, state ? HIGH : LOW); break;
+    case 2: digitalWrite(def_pin_D3, state ? HIGH : LOW); break;
+    case 3: digitalWrite(def_pin_D4, state ? HIGH : LOW); break;
+    case 4: digitalWrite(def_pin_RELE, state ? HIGH : LOW); break;
+    default: break;
+  }
+  
+  // Construção manual da resposta:
+  response.add(request.getServerID());      // ID do servidor
+  response.add(request.getFunctionCode());  // Código da função (05)
+  response.add((addr >> 8) & 0xFF);         // Byte alto do endereço
+  response.add(addr & 0xFF);                // Byte baixo do endereço
+  response.add((value >> 8) & 0xFF);        // Byte alto do valor
+  response.add(value & 0xFF);               // Byte baixo do valor
+
+  return response;
+}
+
+
+// Escrita de um Holding Register (FC 06)
+// Atualiza o vetor e imediatamente configura a saída correspondente
+ModbusMessage writeSingleHoldingRegister(ModbusMessage request) {
+  ModbusMessage response;
+  uint16_t addr = 0, value = 0;
+  uint8_t valueAux = 0;
+  request.get(2, addr);
+  request.get(4, value);
+  
+  // Verifica se o endereço está dentro do range definido para holding registers
+  if (addr >= HRSIZE) {
+    response.setError(request.getServerID(), request.getFunctionCode(), ILLEGAL_DATA_ADDRESS);
+    return response;
+  }
+  
+  // Atualiza imediatamente a saída correspondente:
+  switch (addr) {
+    case 0:
+      valueAux = map(value,0,65535,0,255); 
+      dacWrite(def_pin_DAC1, valueAux);      // Saída DAC (valor de 0 a 255)
+      holdingRegisters[addr] = valueAux;      
+      break;
+    case 1: 
+      valueAux = map(value,0,65535,0,1024); 
+      analogWrite(def_pin_W4a20_1, valueAux);  // Saída para 4-20mA (via analogWrite)
+      holdingRegisters[addr] = valueAux;
+      break;
+    case 2:
+      valueAux = map(value,0,65535,0,1024);     
+      analogWrite(def_pin_PWM, valueAux);      // Saída PWM (via analogWrite)
+      holdingRegisters[addr] = valueAux;
+      break;
+    default:
+      break;
+  }
+  
+  // Construção manual da resposta:
+  response.add(request.getServerID());                    // ID do servidor
+  response.add(request.getFunctionCode());                // Código da função (06)
+  response.add((addr >> 8) & 0xFF);                         // Byte alto do endereço
+  response.add(addr & 0xFF);                                // Byte baixo do endereço
+  response.add((value >> 8) & 0xFF);                        // Byte alto do valor
+  response.add(value & 0xFF);                               // Byte baixo do valor
+
+  return response;
+}
+
 
 void errorMsg(String error, bool restart) {
     WSerial.println(error);
