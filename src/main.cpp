@@ -1,7 +1,7 @@
-// coil status:       [0] def_pin_D1,   [1] def_pin_D2,   [2] def_pin_D3,             [3] def_pin_D4,             [4] def_pin_RELE, [5]
-// Input status:      [0] def_pin_RTN1, [1] def_pin_RTN2, [2] def_pin_PUSH1,          [3] def_pin_PUSH2,          [4]               [5] 
-// Input Registers:   [0] POT1,         [1] POT2,         [2] Leitura 4-20mA canal 1, [3] Leitura 4-20mA canal 2, [4] ADC1,         [5] ADC2,
-// Holding Registers: [0] DAC,          [1] Write 4-20mA, [2] PWM                     [3]                         [4]               [5]  
+// coil status:       [0] def_pin_D2,   [1] def_pin_D3,   [2] def_pin_D4,             [3] def_pin_RELE,           [4]             [5]
+// Input status:      [0] def_pin_RTN1, [1] def_pin_RTN2, [2] def_pin_PUSH1,          [3] def_pin_PUSH2,          [4] def_pin_D1, [5] 
+// Input Registers:   [0] POT1,         [1] POT2,         [2] Leitura 4-20mA canal 1, [3] Leitura 4-20mA canal 2, [4] ADC1,       [5] ADC2,
+// Holding Registers: [0] DAC,          [1] Write 4-20mA, [2] PWM                     [3]                         [4]             [5]  
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -46,14 +46,14 @@ WSerial_c WSerial;
 ModbusServerWiFi modbusServer;
 
 
-#define COILSIZE 5
-#define STATUSSIZE 4
+#define COILSIZE 4
+#define STATUSSIZE 5
 #define HRSIZE 3
 #define IRSIZE 6
 
 
 volatile uint16_t holdingRegisters[HRSIZE] = { 50, 30, 40 }; //[0]: DAC, [1]: Wriete 4-20mA, [2]: PWM
-volatile bool coils[COILSIZE] = { false, false, false, false, false }; //[0]: D1, [1]: D2, [2]: D3, [3]: D4, [4]: RELÊ
+volatile bool coils[COILSIZE] = { false, false, false, false}; //[0]: D2, [1]: D3, [2]: D4, [3]: RELÊ
 
 
 // ========================================================
@@ -108,9 +108,11 @@ ModbusMessage readDiscreteInputs(ModbusMessage request) {
           bool pinState = false;
           switch (inputIndex) {
             case 0: pinState = digitalRead(def_pin_RTN1); break;
-            case 1: pinState = digitalRead(def_pin_RTN2); break;
-            case 2: pinState = digitalRead(def_pin_PUSH1); break;
-            case 3: pinState = digitalRead(def_pin_PUSH2); break;
+            case 1: pinState = digitalRead(def_pin_RTN1); break;
+            case 2: pinState = digitalRead(def_pin_RTN2); break;
+            case 3: pinState = digitalRead(def_pin_PUSH1); break;
+            case 4: pinState = digitalRead(def_pin_PUSH2); break;
+            case 5: pinState = digitalRead(def_pin_D1); break;
             default: break;
           }
           if (pinState) inputByte |= (1 << bit);
@@ -208,12 +210,10 @@ ModbusMessage writeSingleCoil(ModbusMessage request) {
   
   // Atualiza imediatamente a saída digital correspondente:
   switch (addr) {
-    case 0: digitalWrite(def_pin_D1, state ? HIGH : LOW); break;
-    case 1: digitalWrite(def_pin_D2, state ? HIGH : LOW); break;
-    case 2: digitalWrite(def_pin_D3, state ? HIGH : LOW); break;
-    case 3: digitalWrite(def_pin_D4, state ? HIGH : LOW); break;
-    case 4: digitalWrite(def_pin_RELE, state ? HIGH : LOW); break;
-    default: break;
+    case 0: digitalWrite(def_pin_D2, state ? HIGH : LOW); break;
+    case 1: digitalWrite(def_pin_D3, state ? HIGH : LOW); break;
+    case 2: digitalWrite(def_pin_D4, state ? HIGH : LOW); break;
+    default: digitalWrite(def_pin_RELE, state ? HIGH : LOW); break;
   }
   
   // Construção manual da resposta:
@@ -246,28 +246,27 @@ ModbusMessage writeSingleHoldingRegister(ModbusMessage request) {
     return response;
   }
   
-  // // Atualiza imediatamente a saída correspondente:
-  // switch (addr) {
-  //   case 0:
-  //     valueAux = map(value,0,65535,0,255); 
-  //     dacWrite(def_pin_DAC1, valueAux);      // Saída DAC (valor de 0 a 255)
-  //     holdingRegisters[addr] = valueAux;      
-  //     break;
-  //   case 1: 
-  //     valueAux = map(value,0,65535,0,4096); 
-  //     ledcWrite(CHANNEL_W4a20, valueAux); // Saída para 4-20mA (via analogWrite) 
-  //     holdingRegisters[addr] = valueAux;
-  //     break;
-  //   case 2:
-  //     valueAux = map(value,0,65535,0,4096);
-  //     ledcWrite(CHANNEL_PWM, valueAux); // Saída PWM (via analogWrite)
-  //     holdingRegisters[addr] = valueAux;
-  //     break;
-  //   default:
-  //     break;
-  // }
+  // Atualiza imediatamente a saída correspondente:
+  switch (addr) {
+    case 0:
+      valueAux = map(value,0,65535,0,255); 
+      dacWrite(def_pin_DAC1, valueAux);      // Saída DAC (valor de 0 a 255)
+      holdingRegisters[addr] = valueAux;      
+      break;
+    case 1: 
+      valueAux = map(value,0,65535,0,4096); 
+      ledcWrite(CHANNEL_W4a20, valueAux); // Saída para 4-20mA (via analogWrite) 
+      holdingRegisters[addr] = valueAux;
+      break;
+    case 2:
+      valueAux = map(value,0,65535,0,4096);
+      ledcWrite(CHANNEL_PWM, valueAux); // Saída PWM (via analogWrite)
+      holdingRegisters[addr] = valueAux;
+      break;
+    default:
+      break;
+  }
   
-
   // Construção manual da resposta:
   response.add(request.getServerID());                    // ID do servidor
   response.add(request.getFunctionCode());                // Código da função (06)
@@ -311,10 +310,9 @@ ModbusMessage writeMultipleCoils(ModbusMessage request) {
 
     int pin;
     switch (startAddr + i) {
-      case 0: pin = def_pin_D1; break;
-      case 1: pin = def_pin_D2; break;
-      case 2: pin = def_pin_D3; break;
-      case 3: pin = def_pin_D4; break;
+      case 0: pin = def_pin_D2; break;
+      case 1: pin = def_pin_D3; break;
+      case 2: pin = def_pin_D4; break;
       default: pin = def_pin_RELE; break;
     }
     digitalWrite(pin, bit ? HIGH : LOW);
@@ -438,7 +436,6 @@ void setup() {
     // Configuração dos pinos:
     pinMode(def_pin_ADC1, INPUT);
     pinMode(def_pin_DAC1, OUTPUT);
-    pinMode(def_pin_D1, OUTPUT);
     pinMode(def_pin_D2, OUTPUT);
     pinMode(def_pin_D3, OUTPUT);
     pinMode(def_pin_D4, OUTPUT);
@@ -449,9 +446,9 @@ void setup() {
     pinMode(def_pin_RTN2, INPUT_PULLDOWN);
     pinMode(def_pin_PUSH1, INPUT_PULLDOWN);
     pinMode(def_pin_PUSH2, INPUT_PULLDOWN);
+    pinMode(def_pin_D1, INPUT_PULLDOWN);
     
     // Configura os estados iniciais das saídas:
-    digitalWrite(def_pin_D1, LOW);
     digitalWrite(def_pin_D2, LOW);
     digitalWrite(def_pin_D3, LOW);
     digitalWrite(def_pin_D4, LOW);
