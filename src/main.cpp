@@ -32,6 +32,9 @@
 #define def_pin_D4         4    
 #define def_pin_RTN1       2    
 
+#define CHANNEL_W4a20 0
+#define CHANNEL_PWM   1
+
 // Variáveis e objetos do projeto:
 char DDNSName[15] = "inindkit";
 ADS1115_c ads; 
@@ -49,7 +52,7 @@ ModbusServerWiFi modbusServer;
 #define IRSIZE 6
 
 
-volatile uint16_t holdingRegisters[HRSIZE] = { 0, 0, 0 }; //[0]: DAC, [1]: Wriete 4-20mA, [2]: PWM
+volatile uint16_t holdingRegisters[HRSIZE] = { 50, 30, 40 }; //[0]: DAC, [1]: Wriete 4-20mA, [2]: PWM
 volatile bool coils[COILSIZE] = { false, false, false, false, false }; //[0]: D1, [1]: D2, [2]: D3, [3]: D4, [4]: RELÊ
 
 
@@ -128,11 +131,11 @@ ModbusMessage readHoldingRegisters(ModbusMessage request) {
   request.get(2, addr);
   request.get(4, words);
 
-  if (words > HRSIZE) {  // Apenas HRSIZE registradores disponíveis
+  if ((addr + words) > HRSIZE)  {  // Apenas HRSIZE registradores disponíveis
     response.setError(request.getServerID(), request.getFunctionCode(), ILLEGAL_DATA_ADDRESS);
   } else {
     response.add(request.getServerID(), request.getFunctionCode(), (uint8_t)(words * 2));
-    for (uint16_t i = 0; i < words; i++) {
+    for (uint16_t i = 0; i < words; i++) {     
       response.add( holdingRegisters[addr + i] );
     }
   }
@@ -233,34 +236,38 @@ ModbusMessage writeSingleHoldingRegister(ModbusMessage request) {
   uint8_t valueAux = 0;
   request.get(2, addr);
   request.get(4, value);
-  
+
+  // --- DEBUG: imprima no serial o que chegou
+  Serial.printf(">> writeHR: addr=%u, value=%u\n", addr, value);
+
   // Verifica se o endereço está dentro do range definido para holding registers
   if (addr >= HRSIZE) {
     response.setError(request.getServerID(), request.getFunctionCode(), ILLEGAL_DATA_ADDRESS);
     return response;
   }
   
-  // Atualiza imediatamente a saída correspondente:
-  switch (addr) {
-    case 0:
-      valueAux = map(value,0,65535,0,255); 
-      dacWrite(def_pin_DAC1, valueAux);      // Saída DAC (valor de 0 a 255)
-      holdingRegisters[addr] = valueAux;      
-      break;
-    case 1: 
-      valueAux = map(value,0,65535,0,1024); 
-      analogWrite(def_pin_W4a20_1, valueAux);  // Saída para 4-20mA (via analogWrite)
-      holdingRegisters[addr] = valueAux;
-      break;
-    case 2:
-      valueAux = map(value,0,65535,0,1024);     
-      analogWrite(def_pin_PWM, valueAux);      // Saída PWM (via analogWrite)
-      holdingRegisters[addr] = valueAux;
-      break;
-    default:
-      break;
-  }
+  // // Atualiza imediatamente a saída correspondente:
+  // switch (addr) {
+  //   case 0:
+  //     valueAux = map(value,0,65535,0,255); 
+  //     dacWrite(def_pin_DAC1, valueAux);      // Saída DAC (valor de 0 a 255)
+  //     holdingRegisters[addr] = valueAux;      
+  //     break;
+  //   case 1: 
+  //     valueAux = map(value,0,65535,0,4096); 
+  //     ledcWrite(CHANNEL_W4a20, valueAux); // Saída para 4-20mA (via analogWrite) 
+  //     holdingRegisters[addr] = valueAux;
+  //     break;
+  //   case 2:
+  //     valueAux = map(value,0,65535,0,4096);
+  //     ledcWrite(CHANNEL_PWM, valueAux); // Saída PWM (via analogWrite)
+  //     holdingRegisters[addr] = valueAux;
+  //     break;
+  //   default:
+  //     break;
+  // }
   
+
   // Construção manual da resposta:
   response.add(request.getServerID());                    // ID do servidor
   response.add(request.getFunctionCode());                // Código da função (06)
@@ -268,10 +275,110 @@ ModbusMessage writeSingleHoldingRegister(ModbusMessage request) {
   response.add(addr & 0xFF);                                // Byte baixo do endereço
   response.add((value >> 8) & 0xFF);                        // Byte alto do valor
   response.add(value & 0xFF);                               // Byte baixo do valor
-
+  Serial.printf("   OK: storing %u / output %u\n", value, response);  
   return response;
 }
 
+// --- Write Multiple Coils (FC 15) ---
+ModbusMessage writeMultipleCoils(ModbusMessage request) {
+  ModbusMessage response;
+  uint16_t startAddr = 0, quantity = 0;
+  uint8_t byteCount = 0;
+
+  // extrai endereço e quantidade (2 bytes cada) e byteCount (1 byte)
+  request.get(2, startAddr);
+  request.get(4, quantity);
+  request.get(6, byteCount);
+
+  // validações
+  if (quantity < 1 || quantity > COILSIZE ||
+      (startAddr + quantity) > COILSIZE ||
+      byteCount != uint8_t((quantity + 7) / 8)) {
+    response.setError(request.getServerID(),
+                      request.getFunctionCode(),
+                      ILLEGAL_DATA_ADDRESS);
+    return response;
+  }
+
+  // pega ponteiro para os bytes de dados
+  auto buf = request.data();
+
+  // atualiza cada coil e pino
+  for (uint16_t i = 0; i < quantity; i++) {
+    uint8_t byteVal = buf[7 + (i / 8)];
+    bool bit = (byteVal >> (i % 8)) & 0x01;
+    coils[startAddr + i] = bit;
+
+    int pin;
+    switch (startAddr + i) {
+      case 0: pin = def_pin_D1; break;
+      case 1: pin = def_pin_D2; break;
+      case 2: pin = def_pin_D3; break;
+      case 3: pin = def_pin_D4; break;
+      default: pin = def_pin_RELE; break;
+    }
+    digitalWrite(pin, bit ? HIGH : LOW);
+  }
+
+  // monta a resposta (eco de startAddr e quantity)
+  response.add(request.getServerID());
+  response.add(request.getFunctionCode());
+  response.add((startAddr >> 8) & 0xFF);
+  response.add(startAddr & 0xFF);
+  response.add((quantity >> 8) & 0xFF);
+  response.add(quantity & 0xFF);
+  return response;
+}
+
+
+// --- Write Multiple Holding Registers (FC 16) ---
+ModbusMessage writeMultipleRegisters(ModbusMessage request) {
+  ModbusMessage response;
+  uint16_t startAddr = 0, quantity = 0;
+  uint8_t byteCount = 0;
+
+  // extrai parâmetros
+  request.get(2, startAddr);
+  request.get(4, quantity);
+  request.get(6, byteCount);
+
+  // validações
+  if (quantity < 1 || quantity > HRSIZE ||
+      (startAddr + quantity) > HRSIZE ||
+      byteCount != uint8_t(quantity * 2)) {
+    response.setError(request.getServerID(),
+                      request.getFunctionCode(),
+                      ILLEGAL_DATA_ADDRESS);
+    return response;
+  }
+
+  auto buf = request.data();
+  // buf[7] ... buf[7+byteCount-1] contém os valores Hi/Lo
+
+  for (uint16_t i = 0; i < quantity; i++) {
+    uint16_t hi = buf[7 + 2*i];
+    uint16_t lo = buf[7 + 2*i + 1];
+    uint16_t val = (hi << 8) | lo;
+    holdingRegisters[startAddr + i] = val;
+
+    // mapeia 0–65535 para 0–255
+    uint8_t out = uint32_t(val) * 255 / 65535;
+    switch (startAddr + i) {
+      case 0: dacWrite(def_pin_DAC1,       out); break;
+      case 1: analogWrite(def_pin_W4a20_1, out); break;
+      case 2: analogWrite(def_pin_PWM,     out); break;
+    }
+  }
+
+  // monta a resposta (eco de startAddr e quantity)
+  response.add(request.getServerID());
+  response.add(request.getFunctionCode());
+  response.add((startAddr >> 8) & 0xFF);
+  response.add(startAddr & 0xFF);
+  response.add((quantity >> 8) & 0xFF);
+  response.add(quantity & 0xFF);
+  return response;
+}
 
 void errorMsg(String error, bool restart) {
     WSerial.println(error);
@@ -287,6 +394,14 @@ void errorMsg(String error, bool restart) {
 // setup() – inicialização do sistema
 // ========================================================
 void setup() {
+
+    // EEPROM para ler a identificação do kit:
+    EEPROM.begin(1);
+    char idKit[2] = "0";
+    idKit[0] = (char)EEPROM.read(0); // id do kit
+    strcat(DDNSName, idKit);
+    startWSerial(&WSerial, 4000 + String(idKit[0]).toInt(),115200);
+
     WSerial.println("Booting");
     // Inicializa o Display:
     if (startDisplay(&disp, def_pin_SDA, def_pin_SCL)) {
@@ -297,12 +412,6 @@ void setup() {
     }
     delay(50);
     
-    // EEPROM para ler a identificação do kit:
-    EEPROM.begin(1);
-    char idKit[2] = "0";
-    idKit[0] = (char)EEPROM.read(0); // id do kit
-    strcat(DDNSName, idKit);
-
     // Inicia conexão WiFi:
     WiFi.mode(WIFI_STA);
     wm.start(&WSerial);
@@ -325,7 +434,6 @@ void setup() {
 
     // Inicia OTA e Telnet:
     OTA::start(DDNSName);  // Deve ocorrer após a conexão WiFi
-    startWSerial(&WSerial, 4000 + String(idKit[0]).toInt());
 
     // Configuração dos pinos:
     pinMode(def_pin_ADC1, INPUT);
@@ -348,9 +456,16 @@ void setup() {
     digitalWrite(def_pin_D3, LOW);
     digitalWrite(def_pin_D4, LOW);
     digitalWrite(def_pin_RELE, LOW);
-    analogWrite(def_pin_PWM, 0);
+
+    ledcSetup(CHANNEL_W4a20, 19000, 12);           // Atribuimos ao canal 0 a frequencia de 19kHz com resolucao de 12bits.
+    ledcAttachPin(def_pin_W4a20_1, CHANNEL_W4a20); // Atribuimos o pino def_pin_W4a20_1 ao canal POSValvula.
+    ledcWrite(CHANNEL_W4a20, 0);                   // Escrevemos um duty cycle de 0% no canal 0.
+
+    ledcSetup(CHANNEL_PWM, 19000, 12);           // Atribuimos ao canal 0 a frequencia de 19kHz com resolucao de 12bits.    
+    ledcAttachPin(def_pin_PWM, CHANNEL_PWM); // Atribuimos o pino def_pin_W4a20_1 ao canal POSValvula.
+    ledcWrite(CHANNEL_PWM, 0);  
+
     dacWrite(def_pin_DAC1, 0);
-    analogWrite(def_pin_W4a20_1, 0);
     ads.begin();
 
     // Inicializa o servidor Modbus (porta 502, ID 1, timeout 2000ms)
@@ -361,12 +476,14 @@ void setup() {
     WSerial.println("Servidor Modbus TCP (eModbus) iniciado com sucesso!");
 
     // Registra os callbacks para os respectivos códigos de função    
-    modbusServer.registerWorker(1, READ_COIL,           &readCoils);
-    modbusServer.registerWorker(1, READ_DISCR_INPUT,    &readDiscreteInputs);
-    modbusServer.registerWorker(1, READ_HOLD_REGISTER,  &readHoldingRegisters);
-    modbusServer.registerWorker(1, READ_INPUT_REGISTER, &readInputRegisters);
-    modbusServer.registerWorker(1, WRITE_COIL,          &writeSingleCoil);
-    modbusServer.registerWorker(1, WRITE_HOLD_REGISTER, &writeSingleHoldingRegister);
+    modbusServer.registerWorker(1, READ_COIL,            &readCoils);
+    modbusServer.registerWorker(1, READ_DISCR_INPUT,     &readDiscreteInputs);
+    modbusServer.registerWorker(1, READ_HOLD_REGISTER,   &readHoldingRegisters);
+    modbusServer.registerWorker(1, READ_INPUT_REGISTER,  &readInputRegisters);
+    modbusServer.registerWorker(1, WRITE_COIL,           &writeSingleCoil);
+    modbusServer.registerWorker(1, WRITE_HOLD_REGISTER,  &writeSingleHoldingRegister);
+    modbusServer.registerWorker(1, WRITE_MULT_COILS,     &writeMultipleCoils);
+    modbusServer.registerWorker(1, WRITE_MULT_REGISTERS, &writeMultipleRegisters);    
 }
 
 // ========================================================
