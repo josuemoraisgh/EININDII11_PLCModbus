@@ -149,11 +149,10 @@ ModbusMessage readDiscreteInputs(ModbusMessage request) {
           bool pinState = false;
           switch (inputIndex) {
             case 0: pinState = digitalRead(def_pin_RTN1); break;
-            case 1: pinState = digitalRead(def_pin_RTN1); break;
-            case 2: pinState = digitalRead(def_pin_RTN2); break;
-            case 3: pinState = digitalRead(def_pin_PUSH1); break;
-            case 4: pinState = digitalRead(def_pin_PUSH2); break;
-            case 5: pinState = digitalRead(def_pin_D1); break;
+            case 1: pinState = digitalRead(def_pin_RTN2); break;
+            case 2: pinState = digitalRead(def_pin_PUSH1); break;
+            case 3: pinState = digitalRead(def_pin_PUSH2); break;
+            case 4: pinState = digitalRead(def_pin_D1); break;
             default: break;
           }
           if (pinState) inputByte |= (1 << bit);
