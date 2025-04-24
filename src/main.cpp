@@ -60,6 +60,47 @@ volatile bool coils[COILSIZE] = { false, false, false, false}; //[0]: D2, [1]: D
 // CALLBACKS MODBUS – agora realizando leituras de sensores/entradas diretamente
 // ========================================================
 
+// logo após os outros includes
+#define VENDOR_NAME "MeuESP32"
+#define PRODUCT_CODE "inindkit"
+#define REVISION "v1.0"
+
+// ------------------------------------------------------------------
+// Callback para Read Device Identification (FC=0x2B, MEI type=0x0E)
+// ------------------------------------------------------------------
+ModbusMessage readDeviceIdentification(ModbusMessage request) {
+  ModbusMessage response;
+  uint8_t sid = request.getServerID();
+
+  // Cabeçalho
+  response.add(sid);    // Slave ID
+  response.add(0x2B);   // Function code (43)
+  response.add(0x0E);   // MEI type (14)
+
+  // Basic Device ID (01), Conformity Level Basic (01), More Follows=0, Object Count=3
+  response.add(0x01);   // Read Device ID Code = Basic
+  response.add(0x01);   // Conformity Level = Basic
+  response.add(0x00);   // More Follows = No
+  response.add(0x03);   // Número de objetos (Vendor, Product, Revision)
+
+  // Obj 0: VendorName
+  response.add(0x00);              // Object ID = 0
+  response.add(sizeof(VENDOR_NAME)-1);
+  for (auto c: VENDOR_NAME) response.add(c);
+
+  // Obj 1: ProductCode
+  response.add(0x01);              // Object ID = 1
+  response.add(sizeof(PRODUCT_CODE)-1);
+  for (auto c: PRODUCT_CODE) response.add(c);
+
+  // Obj 2: Revision
+  response.add(0x02);              // Object ID = 2
+  response.add(sizeof(REVISION)-1);
+  for (auto c: REVISION) response.add(c);
+
+  return response;
+}
+
 // Leitura das Coils (FC 01)
 // Continua usando o vetor, pois são alteradas pelos comandos de escrita.
 ModbusMessage readCoils(ModbusMessage request) {
@@ -472,7 +513,8 @@ void setup() {
     }
     WSerial.println("Servidor Modbus TCP (eModbus) iniciado com sucesso!");
 
-    // Registra os callbacks para os respectivos códigos de função    
+    // Registra os callbacks para os respectivos códigos de função  
+    modbusServer.registerWorker(1, 0x2B,                 &readDeviceIdentification);// suporte a Read Device Identification   
     modbusServer.registerWorker(1, READ_COIL,            &readCoils);
     modbusServer.registerWorker(1, READ_DISCR_INPUT,     &readDiscreteInputs);
     modbusServer.registerWorker(1, READ_HOLD_REGISTER,   &readHoldingRegisters);
